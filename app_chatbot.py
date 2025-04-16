@@ -5,10 +5,10 @@ from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain.chains import RetrievalQA
 from langchain_core.documents import Document
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline
-from langchain_community.llms import HuggingFacePipeline
+from langchain_community.llms import HuggingFaceHub
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
+# Set Hugging Face token
 os.environ["HUGGINGFACEHUB_API_TOKEN"] = "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"
 
 st.set_page_config(page_title="🧠 arXiv Chatbot", page_icon="📚")
@@ -43,12 +43,12 @@ if "vectorstore" not in st.session_state:
             vectorstore = FAISS.from_documents(docs, embeddings)
             st.session_state["vectorstore"] = vectorstore
 
-        with st.spinner("🤖 Loading FLAN-T5 language model..."):
-            model_name = "google/flan-t5-base"
-            tokenizer = AutoTokenizer.from_pretrained(model_name)
-            model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
-            pipe = pipeline("text2text-generation", model=model, tokenizer=tokenizer, max_new_tokens=512)
-            st.session_state["llm"] = HuggingFacePipeline(pipeline=pipe)
+        with st.spinner("🤖 Loading Mistral-7B via HuggingFaceHub..."):
+            llm = HuggingFaceHub(
+                repo_id="mistralai/Mistral-7B-Instruct-v0.1",
+                model_kwargs={"temperature": 0.5, "max_new_tokens": 512}
+            )
+            st.session_state["llm"] = llm
 
         retriever = st.session_state["vectorstore"].as_retriever()
         st.session_state["qa_chain"] = RetrievalQA.from_chain_type(
@@ -76,7 +76,7 @@ if "qa_chain" in st.session_state:
 
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
-                # 🔍 Show retrieved context
+                # Show retrieved context
                 retrieved_docs = st.session_state["vectorstore"].as_retriever().get_relevant_documents(user_input)
                 st.markdown("**Context Retrieved:**")
                 if not retrieved_docs:
@@ -84,7 +84,7 @@ if "qa_chain" in st.session_state:
                 for doc in retrieved_docs:
                     st.code(doc.page_content[:300])
 
-                # Run actual QA
+                # Run QA chain with better model
                 result = st.session_state["qa_chain"].run(user_input)
                 st.markdown("**Answer:**")
                 st.markdown(result)
