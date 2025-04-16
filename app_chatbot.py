@@ -9,7 +9,6 @@ from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline
 from langchain_community.llms import HuggingFacePipeline
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
-# ⛔ Replace this with st.secrets when sharing
 os.environ["HUGGINGFACEHUB_API_TOKEN"] = "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"
 
 st.set_page_config(page_title="🧠 arXiv Chatbot", page_icon="📚")
@@ -60,7 +59,6 @@ if "vectorstore" not in st.session_state:
 
         st.success("✅ Done! Scroll down to ask questions.")
 
-# Step 2: Chat interface
 if "qa_chain" in st.session_state:
     st.divider()
     st.subheader("💬 Chat with the papers")
