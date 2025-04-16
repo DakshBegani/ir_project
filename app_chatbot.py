@@ -45,7 +45,7 @@ if "vectorstore" not in st.session_state:
 
         with st.spinner("🤖 Loading Mistral-7B via HuggingFaceHub..."):
             llm = HuggingFaceHub(
-                repo_id="mistralai/Mistral-7B-Instruct-v0.1",
+                repo_id="tiiuae/falcon-7b-instruct",
                 model_kwargs={"temperature": 0.5, "max_new_tokens": 512}
             )
             st.session_state["llm"] = llm
