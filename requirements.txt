@@ -11,3 +11,4 @@ faiss-cpu
 huggingface-hub
 python-dotenv
 arxiv
+groq
