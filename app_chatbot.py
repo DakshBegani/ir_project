@@ -7,58 +7,78 @@ from langchain.chains import RetrievalQA
 from langchain_core.documents import Document
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline
 from langchain_community.llms import HuggingFacePipeline
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 
+# ⛔ Replace this with st.secrets when sharing
 os.environ["HUGGINGFACEHUB_API_TOKEN"] = "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"
 
-st.set_page_config(page_title="arXiv Research Chatbot", page_icon="🤖")
+st.set_page_config(page_title="🧠 arXiv Chatbot", page_icon="📚")
 st.title("📚 arXiv Research Chatbot")
 
-topic = st.text_input("Enter a research topic (e.g. 'graph neural networks'):")
+# Step 1: Ask user for a topic
+if "vectorstore" not in st.session_state:
+    topic = st.text_input("Enter a research topic (e.g. 'transformers in NLP'):")
 
-@st.cache_data(show_spinner="🔍 Scraping arXiv...")
-def fetch_papers(query):
-    search = arxiv.Search(query=query, max_results=10, sort_by=arxiv.SortCriterion.SubmittedDate)
-    papers = []
-    for result in search.results():
-        paper = {
-            "title": result.title,
-            "authors": [author.name for author in result.authors],
-            "summary": result.summary,
-            "published": result.published.strftime("%Y-%m-%d"),
-        }
-        papers.append(paper)
-    return papers
+    if topic:
+        with st.spinner("🔍 Scraping arXiv..."):
+            search = arxiv.Search(query=topic, max_results=10, sort_by=arxiv.SortCriterion.SubmittedDate)
+            papers = []
+            for result in search.results():
+                papers.append({
+                    "title": result.title,
+                    "authors": [author.name for author in result.authors],
+                    "summary": result.summary,
+                    "published": result.published.strftime("%Y-%m-%d")
+                })
+            st.session_state["papers"] = papers
 
-@st.cache_resource(show_spinner="⚙️ Loading LLM...")
-def load_llm():
-    model_name = "google/flan-t5-base"
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
-    pipe = pipeline("text2text-generation", model=model, tokenizer=tokenizer, max_new_tokens=512)
-    return HuggingFacePipeline(pipeline=pipe)
+        with st.spinner("📦 Creating vectorstore with better chunking..."):
+            embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+            splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+            docs = []
 
-@st.cache_resource(show_spinner="📦 Building vectorstore...")
-def build_vectorstore(papers):
-    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-    docs = []
-    for paper in papers:
-        text = f"Title: {paper['title']}\nAuthors: {', '.join(paper['authors'])}\nDate: {paper['published']}\n\n{paper['summary']}"
-        docs.append(Document(page_content=text))
-    return FAISS.from_documents(docs, embeddings)
+            for paper in st.session_state["papers"]:
+                full_text = f"Title: {paper['title']}\n\n{paper['summary']}"
+                chunks = splitter.split_text(full_text)
+                docs.extend([Document(page_content=chunk) for chunk in chunks])
 
-if topic:
-    papers = fetch_papers(topic)
-    st.success(f"✅ Retrieved {len(papers)} papers")
+            vectorstore = FAISS.from_documents(docs, embeddings)
+            st.session_state["vectorstore"] = vectorstore
 
-    vectorstore = build_vectorstore(papers)
-    llm = load_llm()
+        with st.spinner("🤖 Loading FLAN-T5 language model..."):
+            model_name = "google/flan-t5-base"
+            tokenizer = AutoTokenizer.from_pretrained(model_name)
+            model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
+            pipe = pipeline("text2text-generation", model=model, tokenizer=tokenizer, max_new_tokens=512)
+            st.session_state["llm"] = HuggingFacePipeline(pipeline=pipe)
 
-    qa = RetrievalQA.from_chain_type(llm=llm, retriever=vectorstore.as_retriever())
+        retriever = st.session_state["vectorstore"].as_retriever()
+        st.session_state["qa_chain"] = RetrievalQA.from_chain_type(
+            llm=st.session_state["llm"],
+            retriever=retriever
+        )
 
+        st.success("✅ Done! Scroll down to ask questions.")
+
+# Step 2: Chat interface
+if "qa_chain" in st.session_state:
     st.divider()
-    st.subheader("💬 Ask your question")
-    query = st.text_input("Question about the papers:")
-    if query:
-        with st.spinner("Generating answer..."):
-            response = qa.run(query)
-        st.write
+    st.subheader("💬 Chat with the papers")
+
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+    if user_input := st.chat_input("Ask a question about the papers..."):
+        st.session_state.messages.append({"role": "user", "content": user_input})
+        with st.chat_message("user"):
+            st.markdown(user_input)
+
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking..."):
+                result = st.session_state["qa_chain"].run(user_input)
+                st.markdown(result)
+                st.session_state.messages.append({"role": "assistant", "content": result})
