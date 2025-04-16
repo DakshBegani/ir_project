@@ -1,18 +1,18 @@
 import os
 import streamlit as st
 import arxiv
+import groq
 from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain.chains import RetrievalQA
 from langchain_core.documents import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.llms import Groq
 
-# Set your GROQ API key here
-os.environ["GROQ_API_KEY"] = "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"
+# Set Groq API Key directly
+GROQ_API_KEY = "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"
+client = groq.Groq(api_key=GROQ_API_KEY)
 
-st.set_page_config(page_title="🧠 arXiv Chatbot with Groq", page_icon="🤖")
-st.title("🧠 arXiv Research Chatbot powered by Groq + LLaMA 3")
+st.set_page_config(page_title="🧠 arXiv Chatbot (Groq API)", page_icon="🤖")
+st.title("🧠 arXiv Research Chatbot (Groq + LLaMA 3 API)")
 
 if "vectorstore" not in st.session_state:
     topic = st.text_input("Enter a research topic (e.g. 'transformers in NLP'):")
@@ -30,7 +30,7 @@ if "vectorstore" not in st.session_state:
                 })
             st.session_state["papers"] = papers
 
-        with st.spinner("📦 Creating vectorstore with better chunking..."):
+        with st.spinner("📦 Creating vectorstore..."):
             embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
             splitter = RecursiveCharacterTextSplitter(chunk_size=300, chunk_overlap=50)
             docs = []
@@ -42,23 +42,9 @@ if "vectorstore" not in st.session_state:
 
             vectorstore = FAISS.from_documents(docs, embeddings)
             st.session_state["vectorstore"] = vectorstore
+            st.success("✅ Papers embedded and ready!")
 
-        with st.spinner("🤖 Loading Groq LLaMA3..."):
-            llm = Groq(
-                model="llama3-8b-8192",  # or use "mixtral-8x7b-32768"
-                api_key=os.environ["GROQ_API_KEY"]
-            )
-            st.session_state["llm"] = llm
-
-        retriever = st.session_state["vectorstore"].as_retriever()
-        st.session_state["qa_chain"] = RetrievalQA.from_chain_type(
-            llm=st.session_state["llm"],
-            retriever=retriever
-        )
-
-        st.success("✅ Chatbot ready! Scroll down to ask questions.")
-
-if "qa_chain" in st.session_state:
+if "vectorstore" in st.session_state:
     st.divider()
     st.subheader("💬 Chat with the papers")
 
@@ -76,14 +62,25 @@ if "qa_chain" in st.session_state:
 
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
-                retrieved_docs = st.session_state["vectorstore"].as_retriever().get_relevant_documents(user_input)
+                retriever = st.session_state["vectorstore"].as_retriever()
+                retrieved_docs = retriever.get_relevant_documents(user_input)
                 st.markdown("**Context Retrieved:**")
                 if not retrieved_docs:
                     st.warning("No relevant context retrieved. The answer may be inaccurate.")
                 for doc in retrieved_docs:
                     st.code(doc.page_content[:300])
 
-                result = st.session_state["qa_chain"].run(user_input)
+                combined_context = "\n\n".join(doc.page_content for doc in retrieved_docs[:5])
+
+                # Construct a manual prompt
+                prompt = f"Answer the following question based on the context below:\n\nContext:\n{combined_context}\n\nQuestion: {user_input}\nAnswer:"
+
+                chat_completion = client.chat.completions.create(
+                    model="llama3-8b-8192",
+                    messages=[{"role": "user", "content": prompt}]
+                )
+
+                result = chat_completion.choices[0].message.content
                 st.markdown("**Answer:**")
                 st.markdown(result)
                 st.session_state.messages.append({"role": "assistant", "content": result})
