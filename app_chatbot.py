@@ -2,17 +2,17 @@ import os
 import streamlit as st
 import arxiv
 from langchain_community.vectorstores import FAISS
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain.chains import RetrievalQA
 from langchain_core.documents import Document
-from langchain_community.llms import HuggingFaceHub
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_community.llms import Groq
 
-# Set Hugging Face token
-os.environ["HUGGINGFACEHUB_API_TOKEN"] = "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"
+# Set your GROQ API key here
+os.environ["GROQ_API_KEY"] = "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"
 
-st.set_page_config(page_title="🧠 arXiv Chatbot", page_icon="📚")
-st.title("📚 arXiv Research Chatbot")
+st.set_page_config(page_title="🧠 arXiv Chatbot with Groq", page_icon="🤖")
+st.title("🧠 arXiv Research Chatbot powered by Groq + LLaMA 3")
 
 if "vectorstore" not in st.session_state:
     topic = st.text_input("Enter a research topic (e.g. 'transformers in NLP'):")
@@ -30,7 +30,7 @@ if "vectorstore" not in st.session_state:
                 })
             st.session_state["papers"] = papers
 
-        with st.spinner("📦 Creating vectorstore with tighter chunks..."):
+        with st.spinner("📦 Creating vectorstore with better chunking..."):
             embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
             splitter = RecursiveCharacterTextSplitter(chunk_size=300, chunk_overlap=50)
             docs = []
@@ -43,10 +43,10 @@ if "vectorstore" not in st.session_state:
             vectorstore = FAISS.from_documents(docs, embeddings)
             st.session_state["vectorstore"] = vectorstore
 
-        with st.spinner("🤖 Loading Mistral-7B via HuggingFaceHub..."):
-            llm = HuggingFaceHub(
-                repo_id="tiiuae/falcon-7b-instruct",
-                model_kwargs={"temperature": 0.5, "max_new_tokens": 512}
+        with st.spinner("🤖 Loading Groq LLaMA3..."):
+            llm = Groq(
+                model="llama3-8b-8192",  # or use "mixtral-8x7b-32768"
+                api_key=os.environ["GROQ_API_KEY"]
             )
             st.session_state["llm"] = llm
 
@@ -76,7 +76,6 @@ if "qa_chain" in st.session_state:
 
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
-                # Show retrieved context
                 retrieved_docs = st.session_state["vectorstore"].as_retriever().get_relevant_documents(user_input)
                 st.markdown("**Context Retrieved:**")
                 if not retrieved_docs:
@@ -84,7 +83,6 @@ if "qa_chain" in st.session_state:
                 for doc in retrieved_docs:
                     st.code(doc.page_content[:300])
 
-                # Run QA chain with better model
                 result = st.session_state["qa_chain"].run(user_input)
                 st.markdown("**Answer:**")
                 st.markdown(result)
