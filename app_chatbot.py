@@ -14,7 +14,6 @@ os.environ["HUGGINGFACEHUB_API_TOKEN"] = "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"
 st.set_page_config(page_title="🧠 arXiv Chatbot", page_icon="📚")
 st.title("📚 arXiv Research Chatbot")
 
-# Step 1: Ask user for a topic
 if "vectorstore" not in st.session_state:
     topic = st.text_input("Enter a research topic (e.g. 'transformers in NLP'):")
 
@@ -31,9 +30,9 @@ if "vectorstore" not in st.session_state:
                 })
             st.session_state["papers"] = papers
 
-        with st.spinner("📦 Creating vectorstore with better chunking..."):
+        with st.spinner("📦 Creating vectorstore with tighter chunks..."):
             embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-            splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+            splitter = RecursiveCharacterTextSplitter(chunk_size=300, chunk_overlap=50)
             docs = []
 
             for paper in st.session_state["papers"]:
@@ -57,7 +56,7 @@ if "vectorstore" not in st.session_state:
             retriever=retriever
         )
 
-        st.success("✅ Done! Scroll down to ask questions.")
+        st.success("✅ Chatbot ready! Scroll down to ask questions.")
 
 if "qa_chain" in st.session_state:
     st.divider()
@@ -77,6 +76,16 @@ if "qa_chain" in st.session_state:
 
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
+                # 🔍 Show retrieved context
+                retrieved_docs = st.session_state["vectorstore"].as_retriever().get_relevant_documents(user_input)
+                st.markdown("**Context Retrieved:**")
+                if not retrieved_docs:
+                    st.warning("No relevant context retrieved. The answer may be inaccurate.")
+                for doc in retrieved_docs:
+                    st.code(doc.page_content[:300])
+
+                # Run actual QA
                 result = st.session_state["qa_chain"].run(user_input)
+                st.markdown("**Answer:**")
                 st.markdown(result)
                 st.session_state.messages.append({"role": "assistant", "content": result})
