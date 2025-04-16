@@ -3,3 +3,5 @@ __pycache__/
 *.pyc
 vectorstore/
 data/
+place_holder.py
+.idea
