@@ -7,18 +7,17 @@ from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_core.documents import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
-# Set Groq API Key directly
 GROQ_API_KEY = "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"
 client = groq.Groq(api_key=GROQ_API_KEY)
 
 st.set_page_config(page_title="🧠 arXiv Chatbot (Groq API)", page_icon="🤖")
-st.title("🧠 arXiv Research Chatbot (Groq + LLaMA 3 API)")
+st.title("🧠 arXiv Research Chatbot")
 
 if "vectorstore" not in st.session_state:
     topic = st.text_input("Enter a research topic (e.g. 'transformers in NLP'):")
 
     if topic:
-        with st.spinner("🔍 Scraping arXiv..."):
+        with st.spinner("Scraping arXiv..."):
             search = arxiv.Search(query=topic, max_results=10, sort_by=arxiv.SortCriterion.SubmittedDate)
             papers = []
             for result in search.results():
@@ -30,7 +29,7 @@ if "vectorstore" not in st.session_state:
                 })
             st.session_state["papers"] = papers
 
-        with st.spinner("📦 Creating vectorstore..."):
+        with st.spinner("Creating vectorstore..."):
             embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
             splitter = RecursiveCharacterTextSplitter(chunk_size=300, chunk_overlap=50)
             docs = []
@@ -42,11 +41,11 @@ if "vectorstore" not in st.session_state:
 
             vectorstore = FAISS.from_documents(docs, embeddings)
             st.session_state["vectorstore"] = vectorstore
-            st.success("✅ Papers embedded and ready!")
+            st.success("Papers embedded and ready!")
 
 if "vectorstore" in st.session_state:
     st.divider()
-    st.subheader("💬 Chat with the papers")
+    st.subheader("Chat with the papers")
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
@@ -71,8 +70,6 @@ if "vectorstore" in st.session_state:
                     st.code(doc.page_content[:300])
 
                 combined_context = "\n\n".join(doc.page_content for doc in retrieved_docs[:5])
-
-                # Construct a manual prompt
                 prompt = f"Answer the following question based on the context below:\n\nContext:\n{combined_context}\n\nQuestion: {user_input}\nAnswer:"
 
                 chat_completion = client.chat.completions.create(
