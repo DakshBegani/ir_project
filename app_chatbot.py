@@ -8,10 +8,11 @@ from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline
 
 @st.cache_resource
 def load_vectorstore():
-    embeddings = HuggingFaceEmbeddings(
-        model_name="sentence-transformers/all-MiniLM-L6-v2"
-    )
-    db = FAISS.load_local("vectorstore", embeddings, allow_dangerous_deserialization=True)
+    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+    with open("data/preprocessed_chunks.json", "r", encoding="utf-8") as f:
+        chunks = json.load(f)
+    docs = [Document(page_content=chunk) for chunk in chunks]
+    db = FAISS.from_documents(docs, embeddings)
     return db
 
 #local llm
